@@ -23,7 +23,7 @@ async function main() {
 
   // === 2. DEPLOYER INFO ===
   const [deployer] = await hre.ethers.getSigners();
-  const balance = await deployer.getBalance();
+  const balance = await deployer.provider.getBalance(deployer.address);
 
   console.log("Deployer :", deployer.address);
   console.log("Balance  :", hre.ethers.formatEther(balance), "ETH");
@@ -122,3 +122,4 @@ main().catch((error) => {
   console.error("");
   process.exitCode = 1;
 });
+
