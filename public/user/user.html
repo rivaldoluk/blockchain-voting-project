@@ -5,34 +5,35 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Pilkades 2025 - Pilih Calon Kepala Desa</title>
   <meta name="description" content="Voting Pilkades Aman, Transparan, Gratis via Blockchain" />
-  
-  <!-- Ethers.js (CDN) -->
-  <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
-  
-  <!-- Config -->
-  <script type="module">
-    import config from '../config.js';
-    window.CONFIG = config;
-  </script>
 
-  <link rel="stylesheet" href="user.css" />
+  <!-- Ethers.js v6 (wajib untuk user.js kamu) -->
+  <script src="https://cdn.jsdelivr.net/npm/ethers@6/dist/ethers.umd.min.js"></script>
+
+  <!-- Google Font Inter (sesuai user.css kamu) -->
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+
+  <!-- CSS kamu — 100% terpisah, tidak digabung! -->
+  <link rel="stylesheet" href="user.css" />
 </head>
 <body>
+
   <div class="container">
     <div class="header">
       <h1>PILKADES 2025</h1>
-      <p>Voting Aman, Transparan & Gratis</p>
-      <div class="status" id="status">Memuat...</div>
+      <p>Voting Aman, Transparan & Gratis via Blockchain</p>
+      <div class="status" id="status">Memuat konfigurasi...</div>
     </div>
 
     <div class="content">
+
+      <!-- Loading -->
       <div id="loading" class="loading">
         <p>Sedang memuat data pemilihan...</p>
       </div>
 
+      <!-- Main Voting -->
       <div id="main" style="display:none;">
-        <div class="countdown" id="timer">-</div>
+        <div class="countdown" id="timer">--:--</div>
 
         <div class="info">
           <p><strong>Pemilih:</strong> <span id="voterAddress">-</span></p>
@@ -48,17 +49,21 @@
         <div class="result" id="result"></div>
       </div>
 
+      <!-- Success Screen -->
       <div id="success" class="success-screen" style="display:none;">
         <h2>Terima Kasih!</h2>
-        <p>Suara Anda telah berhasil direkam di blockchain.</p>
-        <p id="txLink"></p>
+        <p>Suara Anda telah berhasil tercatat di blockchain Sepolia.</p>
+        <div id="txLink">
+          Kontrak: <a href="#" target="_blank" id="contractLink">Lihat di Sepolia Etherscan</a>
+        </div>
         <button onclick="location.reload()">Tutup</button>
       </div>
+
     </div>
   </div>
 
-  <script type="module" src="user.js"></script>
+  <!-- HANYA LOAD user.js — TIDAK ADA CONFIG.JS, TIDAK ADA JS INLINE -->
+  <script type="module" src="./user.js"></script>
+
 </body>
-
 </html>
-
