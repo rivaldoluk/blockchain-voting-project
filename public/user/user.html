@@ -6,17 +6,16 @@
   <title>Pilkades 2025 - Pilih Calon Kepala Desa</title>
   <meta name="description" content="Voting Pilkades Aman, Transparan, Gratis via Blockchain" />
 
-  <!-- Ethers.js v6 (wajib untuk user.js kamu) -->
+  <!-- Ethers.js v6 (wajib) -->
   <script src="https://cdn.jsdelivr.net/npm/ethers@6/dist/ethers.umd.min.js"></script>
 
-  <!-- Google Font Inter (sesuai user.css kamu) -->
+  <!-- Google Font Inter -->
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
 
-  <!-- CSS kamu — 100% terpisah, tidak digabung! -->
-  <link rel="stylesheet" href="user.css" />
+  <!-- CSS kamu -->
+  <link rel="stylesheet" href="/user/user.css" />
 </head>
 <body>
-
   <div class="container">
     <div class="header">
       <h1>PILKADES 2025</h1>
@@ -25,7 +24,6 @@
     </div>
 
     <div class="content">
-
       <!-- Loading -->
       <div id="loading" class="loading">
         <p>Sedang memuat data pemilihan...</p>
@@ -58,14 +56,231 @@
         </div>
         <button onclick="location.reload()">Tutup</button>
       </div>
-
     </div>
   </div>
 
-  <!-- HANYA LOAD user.js — TIDAK ADA CONFIG.JS, TIDAK ADA JS INLINE -->
-  <script type="module" src="/user/user.js"></script>
+  <!-- INLINE SCRIPT: EMBED user.js DI SINI (ANTI-CHROME WARNING) -->
+  <script type="module">
+    // Baca config dari Vercel env
+    const CONFIG = {
+      CONTRACT_ADDRESS: import.meta.env.VITE_CONTRACT_ADDRESS?.trim(),
+      RPC_URL: import.meta.env.VITE_RPC_URL?.trim() || "https://rpc.sepolia.org",
+      RELAYER_URL: import.meta.env.VITE_RELAYER_URL?.trim(),
+      HASIL_URL: import.meta.env.VITE_HASIL_URL?.trim(),
+      CHAIN_ID: import.meta.env.VITE_SEPOLIA_CHAIN_ID || "0xaa36a7"
+    };
 
+    // Validasi
+    if (!CONFIG.CONTRACT_ADDRESS || !CONFIG.RELAYER_URL) {
+      document.getElementById("status").textContent = "Error: Konfigurasi belum lengkap. Hubungi panitia.";
+      document.getElementById("status").style.background = "#ffebee";
+      throw new Error("VITE_CONTRACT_ADDRESS atau VITE_RELAYER_URL belum di-set!");
+    }
+
+    // Update link Etherscan
+    const contractLink = document.getElementById("contractLink");
+    if (contractLink) {
+      contractLink.href = `https://sepolia.etherscan.io/address/${CONFIG.CONTRACT_ADDRESS}`;
+      contractLink.textContent = "Lihat kontrak di Sepolia Etherscan";
+    }
+
+    // INLINE USER.JS CODE (COPY SELURUH ISI user.js KE SINI)
+    const CONTRACT_ADDRESS = CONFIG.CONTRACT_ADDRESS;
+    const RPC_URL = CONFIG.RPC_URL;
+    const RELAYER_URL = CONFIG.RELAYER_URL;
+    const CHAIN_ID = CONFIG.CHAIN_ID;
+
+    const provider = new ethers.JsonRpcProvider(RPC_URL);
+    const contract = new ethers.Contract(CONTRACT_ADDRESS, [
+      "function getKandidat() view returns (string[])",
+      "function statusVoting() view returns (string)",
+      "function getWaktuTersisa() view returns (uint256)",
+      "function telahMemilih(address) view returns (bool)",
+      "function noncePemilih(address) view returns (uint256)",
+      "function totalKandidat() view returns (uint256)"
+    ], provider);
+
+    const urlParams = new URLSearchParams(window.location.search);
+    const privateKeyHex = urlParams.get("pk");
+    let wallet = null;
+    let voterAddress = null;
+    let selectedId = null;
+
+    const statusEl = document.getElementById("status");
+    const loadingEl = document.getElementById("loading");
+    const mainEl = document.getElementById("main");
+    const timerEl = document.getElementById("timer");
+    const voterAddressEl = document.getElementById("voterAddress");
+    const voteStatusEl = document.getElementById("voteStatus");
+    const candidatesEl = document.getElementById("candidates");
+    const voteBtn = document.getElementById("voteBtn");
+    const successEl = document.getElementById("success");
+
+    async function init() {
+      if (!privateKeyHex || privateKeyHex.length !== 64) {
+        statusEl.textContent = "Link tidak valid! Gunakan QR Code resmi dari panitia.";
+        statusEl.style.background = "#ffebee";
+        loadingEl.style.display = "none";
+        return;
+      }
+
+      try {
+        wallet = new ethers.Wallet("0x" + privateKeyHex);
+        voterAddress = wallet.address;
+
+        voterAddressEl.textContent = voterAddress.slice(0, 10) + "..." + voterAddress.slice(-8);
+
+        const [status, sudahVote] = await Promise.all([
+          contract.statusVoting(),
+          contract.telahMemilih(voterAddress)
+        ]);
+
+        if (status !== "Berlangsung") {
+          showClosed(status);
+          return;
+        }
+
+        if (sudahVote) {
+          showAlreadyVoted();
+          return;
+        }
+
+        loadingEl.style.display = "none";
+        mainEl.style.display = "block";
+        statusEl.textContent = "Voting Sedang Berlangsung";
+        statusEl.style.background = "#e8f5e8";
+
+        await loadCandidates();
+        startTimer();
+
+      } catch (err) {
+        console.error(err);
+        statusEl.textContent = "Error: Koneksi blockchain gagal atau link rusak.";
+        statusEl.style.background = "#ffebee";
+        loadingEl.style.display = "none";
+      }
+    }
+
+    async function loadCandidates() {
+      try {
+        const kandidat = await contract.getKandidat();
+        candidatesEl.innerHTML = "";
+
+        kandidat.forEach((nama, i) => {
+          const btn = document.createElement("button");
+          btn.className = "candidate-btn";
+          btn.innerHTML = `<strong>${i + 1}. ${nama}</strong>`;
+          btn.onclick = () => selectCandidate(i, btn);
+          candidatesEl.appendChild(btn);
+        });
+      } catch (err) {
+        candidatesEl.innerHTML = "<p style='color:red;'>Gagal memuat daftar kandidat.</p>";
+      }
+    }
+
+    function selectCandidate(id, btn) {
+      document.querySelectorAll(".candidate-btn").forEach(b => b.classList.remove("selected"));
+      btn.classList.add("selected");
+      selectedId = id;
+      voteBtn.disabled = false;
+      voteBtn.textContent = `Vote untuk ${btn.querySelector("strong").textContent.split(". ")[1]}`;
+    }
+
+    voteBtn.onclick = async () => {
+      if (selectedId === null) return;
+
+      voteBtn.disabled = true;
+      voteBtn.textContent = "Sedang mengirim suara...";
+
+      try {
+        const nonce = await contract.noncePemilih(voterAddress);
+
+        const domain = {
+          name: "PilkadesVoting",
+          version: "1",
+          chainId: parseInt(CHAIN_ID),
+          verifyingContract: CONTRACT_ADDRESS
+        };
+
+        const types = {
+          Vote: [
+            { name: "pemilih", type: "address" },
+            { name: "kandidatId", type: "uint256" },
+            { name: "nonce", type: "uint256" }
+          ]
+        };
+
+        const value = { pemilih: voterAddress, kandidatId: selectedId, nonce };
+
+        const signature = await wallet._signTypedData(domain, types, value);
+
+        const res = await fetch(RELAYER_URL + "/vote", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ pemilih: voterAddress, kandidatId: selectedId, signature })
+        });
+
+        const data = await res.json();
+
+        if (res.ok || data.message) {
+          showSuccess();
+        } else {
+          throw new Error(data.error || "Gagal kirim vote");
+        }
+      } catch (err) {
+        console.error(err);
+        alert("Gagal mengirim suara: " + (err.message || "Coba lagi nanti"));
+        voteBtn.disabled = false;
+        voteBtn.textContent = "Coba Lagi";
+      }
+    };
+
+    function showClosed(status) {
+      loadingEl.style.display = "none";
+      statusEl.textContent = status === "Selesai" ? "Voting Sudah Ditutup" : "Voting Belum Dibuka";
+      statusEl.style.background = "#ffebee";
+    }
+
+    function showAlreadyVoted() {
+      loadingEl.style.display = "none";
+      mainEl.style.display = "block";
+      voteStatusEl.textContent = "Anda sudah memilih sebelumnya. Terima kasih telah berpartisipasi!";
+      voteStatusEl.style.color = "#00c853";
+      voteBtn.style.display = "none";
+    }
+
+    function showSuccess() {
+      mainEl.style.display = "none";
+      successEl.style.display = "block";
+      document.getElementById("txLink").innerHTML = `Suara Anda berhasil tercatat di blockchain!<br>
+        <a href="https://sepolia.etherscan.io/address/${CONTRACT_ADDRESS}" target="_blank" style="color:#00c853;">
+          Lihat kontrak di Sepolia Etherscan
+        </a>`;
+    }
+
+    function updateTimer() {
+      contract.getWaktuTersisa().then(sisa => {
+        if (sisa > 0) {
+          const h = Math.floor(sisa / 3600).toString().padStart(2, '0');
+          const m = Math.floor((sisa % 3600) / 60).toString().padStart(2, '0');
+          const s = (sisa % 60).toString().padStart(2, '0');
+          timerEl.textContent = `${h}:${m}:${s}`;
+        } else {
+          timerEl.textContent = "WAKTU HABIS";
+          setTimeout(() => location.reload(), 3000);
+        }
+      }).catch(() => {
+        timerEl.textContent = "--:--";
+      });
+    }
+
+    function startTimer() {
+      updateTimer();
+      setInterval(updateTimer, 1000);
+    }
+
+    // MULAI INIT
+    init();
+  </script>
 </body>
 </html>
-
-
