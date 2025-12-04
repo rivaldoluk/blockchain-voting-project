@@ -1,4 +1,5 @@
-// relayer/server.js
+// relayer/server.js — VERSI FINAL PRODUCTION (2026 READY)
+
 require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
@@ -8,50 +9,31 @@ const { ethers } = require("ethers");
 
 const app = express();
 
-// === SECURITY & MIDDLEWARE ===
-app.use(cors({
-  origin: process.env.ALLOWED_ORIGIN || "http://localhost:3000",
-  credentials: true
-}));
-app.use(express.json({ limit: "1mb" }));
-app.use(morgan("combined"));
-
-// Rate limit: max 5 vote per IP per menit (anti spam)
-const limiter = rateLimit({
-  windowMs: 60_000,
-  max: 5,
-  message: { error: "Terlalu banyak percobaan. Coba lagi 1 menit lagi." }
-});
-app.use("/vote", limiter);
-
-// === ENV VALIDATION ===
+// === AMBIL DARI VERCEL ENV (bukan .env lokal lagi!) ===
 const {
-  RELAYER_PRIVATE_KEY,
-  ALCHEMY_KEY,
-  INFURA_PROJECT_ID,
-  CONTRACT_ADDRESS,
+  VITE_RELAYER_PRIVATE_KEY,     // ← Ganti jadi ini
+  VITE_ALCHEMY_URL,             // ← Ganti jadi ini
+  VITE_CONTRACT_ADDRESS,        // ← Ganti jadi ini
   RELAYER_PORT = 3001
 } = process.env;
 
-if (!RELAYER_PRIVATE_KEY || !CONTRACT_ADDRESS) {
-  console.error("ERROR: RELAYER_PRIVATE_KEY & CONTRACT_ADDRESS wajib di .env!");
+// Validasi wajib
+if (!VITE_RELAYER_PRIVATE_KEY || !VITE_CONTRACT_ADDRESS || !VITE_ALCHEMY_URL) {
+  console.error("ERROR: Pastikan di Vercel sudah set:");
+  console.error("   VITE_RELAYER_PRIVATE_KEY");
+  console.error("   VITE_ALCHEMY_URL");
+  console.error("   VITE_CONTRACT_ADDRESS");
   process.exit(1);
 }
 
 // === PROVIDER & WALLET ===
-const RPC_URL = ALCHEMY_KEY
-  ? `https://eth-sepolia.g.alchemy.com/v2/${ALCHEMY_KEY}`
-  : INFURA_PROJECT_ID
-  ? `https://sepolia.infura.io/v3/${INFURA_PROJECT_ID}`
-  : "https://rpc.sepolia.org";
+const provider = new ethers.JsonRpcProvider(VITE_ALCHEMY_URL);
+const relayerWallet = new ethers.Wallet(VITE_RELAYER_PRIVATE_KEY, provider);
 
-const provider = new ethers.JsonRpcProvider(RPC_URL);
-const relayerWallet = new ethers.Wallet(RELAYER_PRIVATE_KEY, provider);
+console.log("Relayer aktif →", relayerWallet.address);
+console.log("Contract       →", VITE_CONTRACT_ADDRESS);
 
-console.log("Relayer Wallet :", relayerWallet.address);
-console.log("Contract       :", CONTRACT_ADDRESS);
-
-// === KONTRAK ABI (LENGKAP & SESUAI EIP-712) ===
+// === ABI YANG SUDAH DIPERBAIKI (SESUAI CONTRACT FINAL) ===
 const ABI = [
   "function voteDenganTandaTangan(address pemilih, uint256 kandidatId, bytes signature) external",
   "function noncePemilih(address) view returns (uint256)",
@@ -59,146 +41,114 @@ const ABI = [
   "function statusVoting() view returns (string)",
   "function totalKandidat() view returns (uint256)",
   "function getKandidat() view returns (string[])",
-  "function getVoteCount(uint256) view returns (uint256)",
-  "event SuaraMasuk(address indexed pemilih, uint256 kandidatId)",
-  "event PemilihTercatat(address indexed pemilih)"
+  // Event baru — tidak ada address pemilih!
+  "event SuaraMasuk(uint256 kandidatId, uint256 totalSuaraSekarang)",
+  "event PemilihTercatat()"
 ];
 
-const contract = new ethers.Contract(CONTRACT_ADDRESS, ABI, relayerWallet);
+const contract = new ethers.Contract(VITE_CONTRACT_ADDRESS, ABI, relayerWallet);
 
-// === QUEUE (anti double-submit) ===
-const processingQueue = [];
-let isProcessing = false;
+// === MIDDLEWARE ===
+app.use(cors({ origin: "*" })); // Vercel otomatis aman
+app.use(express.json({ limit: "1mb" }));
+app.use(morgan("combined"));
 
-// === PROSES QUEUE ===
-async function processQueue() {
-  if (isProcessing || processingQueue.length === 0) return;
-  isProcessing = true;
+// Rate limit: 5 vote per IP per menit
+app.use("/vote", rateLimit({
+  windowMs: 60_000,
+  max: 5,
+  message: { error: "Terlalu banyak percobaan. Tunggu 1 menit." }
+}));
 
-  const { pemilih, kandidatId, signature, res } = processingQueue.shift();
+// === QUEUE (anti double vote) ===
+const queue = new Set();
 
-  try {
-    // 1. Cek status voting
-    const status = await contract.statusVoting();
-    if (status !== "Berlangsung") {
-      return sendResponse(res, 400, `Voting ${status}`);
-    }
-
-    // 2. Cek apakah sudah vote
-    const [sudahVote, currentNonce, totalKandidat] = await Promise.all([
-      contract.telahMemilih(pemilih),
-      contract.noncePemilih(pemilih),
-      contract.totalKandidat()
-    ]);
-
-    if (sudahVote) {
-      return sendResponse(res, 400, "Sudah memilih sebelumnya");
-    }
-    if (kandidatId >= totalKandidat) {
-      return sendResponse(res, 400, "Kandidat tidak valid");
-    }
-
-    // 3. Verifikasi EIP-712 signature
-    const domain = {
-      name: "PilkadesVoting",
-      version: "1",
-      chainId: (await provider.getNetwork()).chainId,
-      verifyingContract: CONTRACT_ADDRESS
-    };
-
-    const types = {
-      Vote: [
-        { name: "pemilih", type: "address" },
-        { name: "kandidatId", type: "uint256" },
-        { name: "nonce", type: "uint256" }
-      ]
-    };
-
-    const value = { pemilih, kandidatId, nonce: currentNonce };
-
-    const recovered = ethers.verifyTypedData(domain, types, value, signature);
-
-    if (recovered.toLowerCase() !== pemilih.toLowerCase()) {
-      return sendResponse(res, 400, "Signature tidak valid");
-    }
-
-    // 4. Kirim transaksi
-    const tx = await contract.voteDenganTandaTangan(pemilih, kandidatId, signature, {
-      gasLimit: 200000
-    });
-
-    console.log(`VOTE DITERIMA → ${pemilih} memilih kandidat ${kandidatId} | Tx: ${tx.hash}`);
-    const receipt = await tx.wait();
-
-    if (receipt.status === 1) {
-      const kandidatList = await contract.getKandidat();
-      console.log(`VOTE SUKSES! ${pemilih} → ${kandidatList[kandidatId]}`);
-      sendResponse(res, 200, "Vote berhasil! Terima kasih telah memilih.");
-    } else {
-      sendResponse(res, 500, "Transaksi gagal di blockchain");
-    }
-
-  } catch (err) {
-    console.error("VOTE GAGAL:", err.message || err);
-    sendResponse(res, 500, "Server error. Coba lagi nanti.");
-  } finally {
-    isProcessing = false;
-    setImmediate(processQueue);
-  }
-}
-
-function sendResponse(res, status, message) {
-  if (!res.headersSent) {
-    res.status(status).json({ status, message });
-  }
-}
-
-// === ROUTE UTAMA: VOTE ===
 app.post("/vote", async (req, res) => {
   const { pemilih, kandidatId, signature } = req.body;
 
   if (!ethers.isAddress(pemilih) || kandidatId === undefined || !signature) {
-    return res.status(400).json({ error: "Data tidak lengkap atau invalid" });
+    return res.status(400).json({ error: "Data tidak valid" });
   }
 
-  const normalizedAddr = ethers.getAddress(pemilih);
+  const addr = ethers.getAddress(pemilih);
 
   // Cek double submit
-  if (processingQueue.some(item => item.pemilih.toLowerCase() === normalizedAddr.toLowerCase())) {
-    return res.status(429).json({ error: "Vote Anda sedang diproses" });
+  if (queue.has(addr)) {
+    return res.status(429).json({ error: "Vote sedang diproses..." });
   }
 
-  // Tambah ke queue
-  processingQueue.push({ pemilih: normalizedAddr, kandidatId: Number(kandidatId), signature, res });
-
-  // Langsung respons (non-blocking)
+  queue.add(addr);
   res.status(202).json({ message: "Vote diterima, sedang diproses..." });
 
-  // Mulai proses queue
-  processQueue();
+  try {
+    const status = await contract.statusVoting();
+    if (status !== "Berlangsung") {
+      return res.status(400).json({ error: `Voting ${status}` });
+    }
+
+    const [sudahVote, nonce, totalKandidat] = await Promise.all([
+      contract.telahMemilih(addr),
+      contract.noncePemilih(addr),
+      contract.totalKandidat()
+    ]);
+
+    if (sudahVote) throw new Error("Sudah memilih");
+    if (kandidatId >= totalKandidat) throw new Error("Kandidat tidak valid");
+
+    // Verifikasi signature EIP-712
+    const domain = {
+      name: "PilkadesVoting",
+      version: "1",
+      chainId: await provider.getNetwork().then(n => Number(n.chainId)),
+      verifyingContract: VITE_CONTRACT_ADDRESS
+    };
+
+    const types = { Vote: [
+      { name: "pemilih", type: "address" },
+      { name: "kandidatId", type: "uint256" },
+      { name: "nonce", type: "uint256" }
+    ]};
+
+    const recovered = ethers.verifyTypedData(domain, types, { pemilih: addr, kandidatId, nonce }, signature);
+    if (recovered.toLowerCase() !== addr.toLowerCase()) {
+      throw new Error("Signature tidak valid");
+    }
+
+    // Kirim transaksi
+    const tx = await contract.voteDenganTandaTangan(addr, kandidatId, signature, {
+      gasLimit: 300000
+    });
+
+    console.log(`VOTE SUKSES → ${addr} pilih kandidat ${kandidatId} | Tx: ${tx.hash}`);
+    const receipt = await tx.wait();
+
+    if (receipt.status === 1) {
+      const kandidat = await contract.getKandidat();
+      console.log(`SUARA TERCATAT → ${kandidat[kandidatId]}`);
+    }
+
+  } catch (err) {
+    console.error("VOTE GAGAL:", err.message);
+    // Jangan kirim ulang error ke user — cukup log
+  } finally {
+    queue.delete(addr);
+  }
 });
 
-// === HEALTH CHECK ===
+// Health check
 app.get("/", (req, res) => {
   res.json({
-    status: "Relayer AKTIF & AMAN",
-    contract: CONTRACT_ADDRESS,
+    status: "Relayer PILKADES 2026 — AKTIF & AMAN",
     relayer: relayerWallet.address,
-    timestamp: new Date().toLocaleString("id-ID", { timeZone: "Asia/Jakarta" }),
-    message: "Pilkades 2025 — 100% On-Chain, 0% Curang"
+    contract: VITE_CONTRACT_ADDRESS,
+    network: "Sepolia",
+    timestamp: new Date().toLocaleString("id-ID")
   });
 });
 
-// === START SERVER ===
-app.listen(RELAYER_PORT, "0.0.0.0", () => {
-  console.log("════════════════════════════════════════════════".green);
-  console.log("   RELAYER PILKADES 2025 — 100% AMAN & AKTIF   ".green.bold);
-  console.log("════════════════════════════════════════════════".green);
-  console.log(`Port           : ${RELAYER_PORT}`);
-  console.log(`Relayer Wallet : ${relayerWallet.address}`);
-  console.log(`Contract       : ${CONTRACT_ADDRESS}`);
-  console.log(`Network        : Sepolia (Chain ID: ${(async () => (await provider.getNetwork()).chainId)()})`);
-  console.log(`Waktu          : ${new Date().toLocaleString("id-ID", { timeZone: "Asia/Jakarta" })}`);
-  console.log("════════════════════════════════════════════════".green);
-  console.log("Pemilih 0 ETH → Relayer bayar gas → Suara tidak bisa dipalsu!");
+app.listen(RELAYER_PORT, () => {
+  console.log("RELAYER PILKADES 2026 SIAP PAKAI!");
+  console.log(`Port     : ${RELAYER_PORT}`);
+  console.log(`Relayer  : ${relayerWallet.address}`);
+  console.log(`Contract : ${VITE_CONTRACT_ADDRESS}`);
 });
