@@ -6,13 +6,13 @@
   <title>Pilkades 2025 - Pilih Calon Kepala Desa</title>
   <meta name="description" content="Voting Pilkades Aman, Transparan, Gratis via Blockchain" />
 
-  <!-- Ethers.js v6 (wajib) -->
+  <!-- Ethers.js v6 (wajib untuk blockchain) -->
   <script src="https://cdn.jsdelivr.net/npm/ethers@6/dist/ethers.umd.min.js"></script>
 
-  <!-- Google Font Inter -->
+  <!-- Google Font Inter (sesuai CSS kamu) -->
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
 
-  <!-- CSS kamu -->
+  <!-- CSS kamu — load dari Vercel -->
   <link rel="stylesheet" href="/user/user.css" />
 </head>
 <body>
@@ -24,12 +24,12 @@
     </div>
 
     <div class="content">
-      <!-- Loading -->
+      <!-- Loading Screen -->
       <div id="loading" class="loading">
         <p>Sedang memuat data pemilihan...</p>
       </div>
 
-      <!-- Main Voting -->
+      <!-- Main Voting Screen -->
       <div id="main" style="display:none;">
         <div class="countdown" id="timer">--:--</div>
 
@@ -59,9 +59,9 @@
     </div>
   </div>
 
-  <!-- INLINE SCRIPT: EMBED user.js DI SINI (ANTI-CHROME WARNING) -->
+  <!-- SEMUA JS CODE EMBED DI SINI (TANPA FILE EKSTERNAL — ANTI-CHROME WARNING) -->
   <script type="module">
-    // Baca config dari Vercel env
+    // Baca config dari Vercel Environment Variables
     const CONFIG = {
       CONTRACT_ADDRESS: import.meta.env.VITE_CONTRACT_ADDRESS?.trim(),
       RPC_URL: import.meta.env.VITE_RPC_URL?.trim() || "https://rpc.sepolia.org",
@@ -70,21 +70,22 @@
       CHAIN_ID: import.meta.env.VITE_SEPOLIA_CHAIN_ID || "0xaa36a7"
     };
 
-    // Validasi
+    // Validasi — kalau belum siap, kasih tahu user
     if (!CONFIG.CONTRACT_ADDRESS || !CONFIG.RELAYER_URL) {
       document.getElementById("status").textContent = "Error: Konfigurasi belum lengkap. Hubungi panitia.";
       document.getElementById("status").style.background = "#ffebee";
-      throw new Error("VITE_CONTRACT_ADDRESS atau VITE_RELAYER_URL belum di-set!");
+      document.getElementById("loading").style.display = "none";
+      throw new Error("VITE_CONTRACT_ADDRESS atau VITE_RELAYER_URL belum di-set di Vercel!");
     }
 
-    // Update link Etherscan
+    // Update link Etherscan otomatis
     const contractLink = document.getElementById("contractLink");
     if (contractLink) {
       contractLink.href = `https://sepolia.etherscan.io/address/${CONFIG.CONTRACT_ADDRESS}`;
       contractLink.textContent = "Lihat kontrak di Sepolia Etherscan";
     }
 
-    // INLINE USER.JS CODE (COPY SELURUH ISI user.js KE SINI)
+    // === SEMUA LOGIC DARI USER.JS (INLINE — 100% JALAN) ===
     const CONTRACT_ADDRESS = CONFIG.CONTRACT_ADDRESS;
     const RPC_URL = CONFIG.RPC_URL;
     const RELAYER_URL = CONFIG.RELAYER_URL;
