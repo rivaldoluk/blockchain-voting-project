@@ -1,6 +1,17 @@
 // public/user/user.js
-import config from '../config.js';
-const { CONTRACT_ADDRESS, RELAYER_URL, RPC_URL = "https://rpc.sepolia.org" } = config;
+// TIDAK ADA LAGI import config.js → semua pakai import.meta.env
+
+const CONTRACT_ADDRESS = import.meta.env.VITE_CONTRACT_ADDRESS;
+const RPC_URL          = import.meta.env.VITE_RPC_URL || "https://rpc.sepolia.org";
+const RELAYER_URL      = import.meta.env.VITE_RELAYER_URL || "https://blockchain-voting-project.vercel.app/public/vote";
+const HASIL_URL        = import.meta.env.VITE_HASIL_URL   || "https://blockchain-voting-project.vercel.app/public/hasil";
+const CHAIN_ID         = import.meta.env.VITE_SEPOLIA_CHAIN_ID || "0xaa36a7";
+
+// Pastikan semua variabel wajib ada
+if (!CONTRACT_ADDRESS) {
+  alert("Error: Contract belum di-deploy atau konfigurasi belum lengkap.");
+  throw new Error("VITE_CONTRACT_ADDRESS belum di-set di Vercel!");
+}
 
 const provider = new ethers.providers.JsonRpcProvider(RPC_URL);
 const contract = new ethers.Contract(CONTRACT_ADDRESS, [
@@ -17,24 +28,25 @@ const privateKeyHex = urlParams.get("pk");
 let wallet = null;
 let voterAddress = null;
 
-const statusEl = document.getElementById("status");
-const loadingEl = document.getElementById("loading");
-const mainEl = document.getElementById("main");
-const timerEl = document.getElementById("timer");
+const statusEl       = document.getElementById("status");
+const loadingEl      = document.getElementById("loading");
+const mainEl         = document.getElementById("main");
+const timerEl        = document.getElementById("timer");
 const voterAddressEl = document.getElementById("voterAddress");
-const voteStatusEl = document.getElementById("voteStatus");
-const candidatesEl = document.getElementById("candidates");
-const voteBtn = document.getElementById("voteBtn");
-const resultEl = document.getElementById("result");
-const successEl = document.getElementById("success");
-const txLinkEl = document.getElementById("txLink");
+const voteStatusEl   = document.getElementById("voteStatus");
+const candidatesEl   = document.getElementById("candidates");
+const voteBtn        = document.getElementById("voteBtn");
+const resultEl       = document.getElementById("result");
+const successEl      = document.getElementById("success");
+const txLinkEl       = document.getElementById("txLink");
 
 let selectedId = null;
 
 async function init() {
-  if (!privateKeyHex) {
-    statusEl.textContent = "Link tidak valid! Scan QR resmi.";
+  if (!privateKeyHex || privateKeyHex.length !== 64) {
+    statusEl.textContent = "Link tidak valid! Gunakan QR Code resmi dari panitia.";
     statusEl.style.background = "#ffebee";
+    loadingEl.style.display = "none";
     return;
   }
 
@@ -66,26 +78,30 @@ async function init() {
 
     await loadCandidates();
     startTimer();
-    setInterval(updateTimer, 1000);
 
   } catch (err) {
     console.error(err);
-    statusEl.textContent = "Error: Link rusak atau kontrak error";
+    statusEl.textContent = "Error: Koneksi blockchain gagal atau link rusak.";
     statusEl.style.background = "#ffebee";
+    loadingEl.style.display = "none";
   }
 }
 
 async function loadCandidates() {
-  const kandidat = await contract.getKandidat();
-  candidatesEl.innerHTML = "";
+  try {
+    const kandidat = await contract.getKandidat();
+    candidatesEl.innerHTML = "";
 
-  kandidat.forEach((nama, i) => {
-    const btn = document.createElement("button");
-    btn.className = "candidate-btn";
-    btn.innerHTML = `<strong>${i + 1}. ${nama}</strong>`;
-    btn.onclick = () => selectCandidate(i, btn);
-    candidatesEl.appendChild(btn);
-  });
+    kandidat.forEach((nama, i) => {
+      const btn = document.createElement("button");
+      btn.className = "candidate-btn";
+      btn.innerHTML = `<strong>${i + 1}. ${nama}</strong>`;
+      btn.onclick = () => selectCandidate(i, btn);
+      candidatesEl.appendChild(btn);
+    });
+  } catch (err) {
+    candidatesEl.innerHTML = "<p style='color:red;'>Gagal memuat daftar kandidat.</p>";
+  }
 }
 
 function selectCandidate(id, btn) {
@@ -100,7 +116,7 @@ voteBtn.onclick = async () => {
   if (selectedId === null) return;
 
   voteBtn.disabled = true;
-  voteBtn.textContent = "Sedang memproses...";
+  voteBtn.textContent = "Sedang mengirim suara...";
 
   try {
     const nonce = await contract.noncePemilih(voterAddress);
@@ -108,7 +124,7 @@ voteBtn.onclick = async () => {
     const domain = {
       name: "PilkadesVoting",
       version: "1",
-      chainId: await provider.getNetwork().then(n => n.chainId),
+      chainId: parseInt(CHAIN_ID),
       verifyingContract: CONTRACT_ADDRESS
     };
 
@@ -138,7 +154,8 @@ voteBtn.onclick = async () => {
       throw new Error(data.error || "Gagal kirim vote");
     }
   } catch (err) {
-    alert("Gagal vote: " + (err.message || "Coba lagi"));
+    console.error(err);
+    alert("Gagal mengirim suara: " + (err.message || "Coba lagi nanti"));
     voteBtn.disabled = false;
     voteBtn.textContent = "Coba Lagi";
   }
@@ -153,17 +170,17 @@ function showClosed(status) {
 function showAlreadyVoted() {
   loadingEl.style.display = "none";
   mainEl.style.display = "block";
-  voteStatusEl.textContent = "Anda sudah memilih sebelumnya. Terima kasih!";
-  voteStatusEl.style.color = "green";
+  voteStatusEl.textContent = "Anda sudah memilih sebelumnya. Terima kasih telah berpartisipasi!";
+  voteStatusEl.style.color = "#00c853";
   voteBtn.style.display = "none";
 }
 
 function showSuccess() {
   mainEl.style.display = "none";
   successEl.style.display = "block";
-  txLinkEl.innerHTML = `Suara Anda tercatat di blockchain.<br>
-    <a href="https://sepolia.etherscan.io/address/${CONTRACT_ADDRESS}" target="_blank">
-      Lihat kontrak di Etherscan
+  txLinkEl.innerHTML = `Suara Anda berhasil tercatat di blockchain!<br>
+    <a href="https://sepolia.etherscan.io/address/${CONTRACT_ADDRESS}" target="_blank" style="color:#00c853;">
+      Lihat kontrak di Sepolia Etherscan
     </a>`;
 }
 
@@ -176,9 +193,11 @@ function updateTimer() {
       timerEl.textContent = `${h}:${m}:${s}`;
     } else {
       timerEl.textContent = "WAKTU HABIS";
-      location.reload();
+      setTimeout(() => location.reload(), 3000);
     }
-  }).catch(() => timerEl.textContent = "--:--");
+  }).catch(() => {
+    timerEl.textContent = "--:--";
+  });
 }
 
 function startTimer() {
@@ -186,9 +205,5 @@ function startTimer() {
   setInterval(updateTimer, 1000);
 }
 
-// START
-
+// MULAI
 init();
-
-
-
