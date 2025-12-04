@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Pilkades 2025 - Pilih Calon Kepala Desa</title>
+  <meta name="description" content="Voting Pilkades Aman, Transparan, Gratis via Blockchain" />
+  
+  <!-- Ethers.js (CDN) -->
+  <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
+  
+  <!-- Config -->
+  <script type="module">
+    import config from '../config.js';
+    window.CONFIG = config;
+  </script>
+
+  <link rel="stylesheet" href="user.css" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>PILKADES 2025</h1>
+      <p>Voting Aman, Transparan & Gratis</p>
+      <div class="status" id="status">Memuat...</div>
+    </div>
+
+    <div class="content">
+      <div id="loading" class="loading">
+        <p>Sedang memuat data pemilihan...</p>
+      </div>
+
+      <div id="main" style="display:none;">
+        <div class="countdown" id="timer">-</div>
+
+        <div class="info">
+          <p><strong>Pemilih:</strong> <span id="voterAddress">-</span></p>
+          <p id="voteStatus">Silakan pilih kandidat di bawah ini</p>
+        </div>
+
+        <div class="candidates" id="candidates"></div>
+
+        <button id="voteBtn" class="vote-btn" disabled>
+          Pilih Kandidat Terlebih Dahulu
+        </button>
+
+        <div class="result" id="result"></div>
+      </div>
+
+      <div id="success" class="success-screen" style="display:none;">
+        <h2>Terima Kasih!</h2>
+        <p>Suara Anda telah berhasil direkam di blockchain.</p>
+        <p id="txLink"></p>
+        <button onclick="location.reload()">Tutup</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="user.js"></script>
+</body>
+
+</html>
+

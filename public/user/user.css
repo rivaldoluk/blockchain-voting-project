@@ -1,0 +1,177 @@
+:root {
+  --primary: #4a148c;
+  --success: #1b5e20;
+  --danger: #d32f2f;
+  --warning: #ff8f00;
+  --bg: #f8f9fa;
+  --card: #ffffff;
+  --text: #212529;
+  --gray: #6c757d;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'Inter', sans-serif;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  min-height: 100vh;
+  padding: 20px;
+  color: var(--text);
+}
+
+.container {
+  max-width: 480px;
+  margin: 20px auto;
+  background: var(--card);
+  border-radius: 20px;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
+  overflow: hidden;
+}
+
+.header {
+  background: var(--primary);
+  color: white;
+  padding: 28px 20px;
+  text-align: center;
+}
+
+.header h1 {
+  font-size: 28px;
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+
+.header p {
+  opacity: 0.95;
+  font-size: 16px;
+}
+
+.status {
+  margin-top: 12px;
+  padding: 8px 16px;
+  border-radius: 12px;
+  font-size: 14px;
+  font-weight: 600;
+  background: rgba(255,255,255,0.2);
+}
+
+.content {
+  padding: 32px 24px;
+}
+
+.loading {
+  text-align: center;
+  padding: 40px 20px;
+  color: var(--gray);
+  font-size: 18px;
+}
+
+.info {
+  background: #f0f0f0;
+  padding: 16px;
+  border-radius: 12px;
+  margin-bottom: 20px;
+  font-size: 15px;
+}
+
+.info p {
+  margin: 8px 0;
+}
+
+.countdown {
+  text-align: center;
+  font-size: 36px;
+  font-weight: 700;
+  color: var(--warning);
+  margin: 20px 0;
+  text-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.candidates {
+  margin: 24px 0;
+}
+
+.candidate-btn {
+  width: 100%;
+  padding: 20px;
+  margin: 12px 0;
+  background: #f8f9fa;
+  border: 2px solid #e0e0e0;
+  border-radius: 16px;
+  font-size: 18px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+  transition: all 0.3s;
+}
+
+.candidate-btn:hover {
+  border-color: #4CAF50;
+  transform: translateY(-2px);
+}
+
+.candidate-btn.selected {
+  background: #e8f5e8;
+  border-color: #4CAF50;
+  box-shadow: 0 0 0 4px rgba(76, 175, 80, 0.2);
+}
+
+.vote-btn {
+  width: 100%;
+  padding: 18px;
+  margin: 20px 0;
+  background: #4CAF50;
+  color: white;
+  border: none;
+  border-radius: 16px;
+  font-size: 18px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.3s;
+}
+
+.vote-btn:disabled {
+  background: #ccc;
+  cursor: not-allowed;
+}
+
+.result {
+  margin-top: 24px;
+  padding: 20px;
+  background: #f0f8ff;
+  border-radius: 12px;
+  font-size: 15px;
+  line-height: 1.6;
+}
+
+.success-screen {
+  text-align: center;
+  padding: 60px 20px;
+}
+
+.success-screen h2 {
+  font-size: 32px;
+  color: var(--success);
+  margin-bottom: 16px;
+}
+
+.success-screen p {
+  font-size: 18px;
+  margin: 16px 0;
+  color: var(--gray);
+}
+
+.success-screen button {
+  margin-top: 30px;
+  padding: 14px 32px;
+  background: var(--primary);
+  color: white;
+  border: none;
+  border-radius: 12px;
+  font-size: 16px;
+  cursor: pointer;
+}
